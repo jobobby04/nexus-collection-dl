@@ -12,7 +12,7 @@ from .collection import (
     parse_collection_url,
     parse_mod_url,
 )
-from .downloader import Downloader, build_mod_filename
+from .downloader import Downloader, build_mod_stem
 
 # progress callback: (event_type, percentage 0-1, message)
 ProgressCallback = Callable[[str, float, str], None]
@@ -149,12 +149,14 @@ class DownloadService:
                 collection_dir=mods_dir,
             )
 
-        # Premium user: download directly, skipping files that already exist
+        # Premium user: download directly, skipping files that already exist.
+        # Match on the extension-less stem so the check works before the
+        # real extension is known from the CDN.
         skipped = 0
         to_download = []
         for mod in mods:
-            expected = mods_dir / build_mod_filename(mod)
-            if expected.exists():
+            stem = build_mod_stem(mod)
+            if (mods_dir / stem).exists() or any(mods_dir.glob(stem + ".*")):
                 skipped += 1
             else:
                 to_download.append(mod)

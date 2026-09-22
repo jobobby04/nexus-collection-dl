@@ -35,19 +35,15 @@ def _sanitize_version(version: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", version).strip("-")
 
 
-def build_mod_filename(mod_info: dict[str, Any], download_url: str | None = None) -> str:
+def build_mod_stem(mod_info: dict[str, Any]) -> str:
     """
-    Build the output filename for a mod file.
+    Build the extension-less part of the output filename.
 
-    Format: {mod_name}-{mod_id}-{version}-{file_id}{ext}
-    Example: Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
+    Format: {mod_name}-{mod_id}-{version}-{file_id}
+    Example: Ring of Mind Shielding Edit-19607-1-0-1762818108
 
     Optional mods get an [OPTIONAL] prefix:
-    Example: [OPTIONAL] Some Mod-123-1-0-456.zip
-
-    The extension comes from the CDN download URL, falling back to the
-    original Nexus filename, then to .zip when no extension can be
-    determined.
+    Example: [OPTIONAL] Some Mod-123-1-0-456
     """
     mod_name = _sanitize_component(mod_info.get("mod_name") or "")
     if mod_info.get("optional") and mod_name:
@@ -55,14 +51,6 @@ def build_mod_filename(mod_info: dict[str, Any], download_url: str | None = None
     mod_id = mod_info.get("mod_id")
     version = mod_info.get("version") or ""
     file_id = mod_info.get("file_id")
-
-    ext = ""
-    if download_url:
-        ext = Path(download_url.split("?")[0]).suffix
-    if not ext:
-        ext = Path(mod_info.get("filename") or "").suffix
-    if not ext:
-        ext = ".zip"
 
     parts = [
         part
@@ -74,7 +62,44 @@ def build_mod_filename(mod_info: dict[str, Any], download_url: str | None = None
         )
         if part
     ]
-    return "-".join(parts) + ext
+    return "-".join(parts)
+
+
+def build_mod_filename(
+    mod_info: dict[str, Any],
+    download_url: str | None = None,
+    ext: str | None = None,
+) -> str:
+    """
+    Build the output filename for a mod file.
+
+    Format: {mod_name}-{mod_id}-{version}-{file_id}{ext}
+    Example: Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
+
+    The extension is taken from, in order:
+    1. ext (the real filename reported by the CDN, if known)
+    2. the CDN download URL
+    3. the original Nexus filename
+    4. .zip
+    """
+    if not ext:
+        if download_url:
+            ext = Path(download_url.split("?")[0]).suffix
+        if not ext:
+            ext = Path(mod_info.get("filename") or "").suffix
+        if not ext:
+            ext = ".zip"
+    return build_mod_stem(mod_info) + ext
+
+
+def ext_from_content_disposition(headers: dict[str, str]) -> str:
+    """Extract the file extension from a Content-Disposition header."""
+    cd = headers.get("Content-Disposition", "")
+    # RFC 5987 encoded form first (filename*=UTF-8''name.zip), then plain
+    match = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", cd, re.IGNORECASE)
+    if match:
+        return Path(match.group(1).strip()).suffix
+    return ""
 
 
 class Downloader:
@@ -113,17 +138,22 @@ class Downloader:
             raise DownloadError(f"Failed to get download URL for {original_filename}: {e}")
 
         target_dir.mkdir(parents=True, exist_ok=True)
-        final_path = target_dir / build_mod_filename(mod_info, download_url)
-
-        # Already downloaded - skip
-        if final_path.exists():
-            return final_path
-
-        temp_path = target_dir / f".downloading_{final_path.name}"
 
         try:
+            # Streaming GET fetches headers only, so we can resolve the real
+            # filename (Content-Disposition) before deciding where to write.
             response = self.session.get(download_url, stream=True)
             response.raise_for_status()
+
+            ext = ext_from_content_disposition(response.headers)
+            final_path = target_dir / build_mod_filename(mod_info, download_url, ext=ext)
+
+            # Already downloaded - skip
+            if final_path.exists():
+                response.close()
+                return final_path
+
+            temp_path = target_dir / f".downloading_{final_path.name}"
 
             total_size = int(response.headers.get("content-length", 0))
 

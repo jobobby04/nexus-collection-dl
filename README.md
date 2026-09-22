@@ -106,7 +106,7 @@ For example, the mod `Ring of Mind Shielding Edit` (mod id 19607, file id 176281
 Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
 ```
 
-Version dots are replaced with dashes. The extension comes from the CDN download URL (falling back to the original Nexus filename, then `.zip` if no extension can be determined). Optional mods get an `[OPTIONAL]` prefix, e.g. `[OPTIONAL] Some Mod-123-1-0-456.zip`.
+Version dots are replaced with dashes. The extension comes from the real filename the CDN reports for the file (falling back to the CDN URL, the original Nexus filename, then `.zip`). Optional mods get an `[OPTIONAL]` prefix, e.g. `[OPTIONAL] Some Mod-123-1-0-456.zip`.
 
 Archives are kept intact - the tool downloads files and leaves them as `.zip`, `.7z`, `.rar`, etc.
 
