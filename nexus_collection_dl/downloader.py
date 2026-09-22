@@ -37,17 +37,12 @@ def _sanitize_version(version: str) -> str:
 
 def build_mod_stem(mod_info: dict[str, Any]) -> str:
     """
-    Build the extension-less part of the output filename.
+    Build a fallback filename for a mod file.
 
-    Format: {mod_name}-{mod_id}-{version}-{file_id}
-    Example: Ring of Mind Shielding Edit-19607-1-0-1762818108
-
-    Optional mods get an [OPTIONAL] prefix:
-    Example: [OPTIONAL] Some Mod-123-1-0-456
+    Format: {mod_name}-{mod_id}-{version}-{file_id}.zip
+    Used only when the CDN does not report a filename.
     """
     mod_name = _sanitize_component(mod_info.get("mod_name") or "")
-    if mod_info.get("optional") and mod_name:
-        mod_name = f"[OPTIONAL] {mod_name}"
     mod_id = mod_info.get("mod_id")
     version = mod_info.get("version") or ""
     file_id = mod_info.get("file_id")
@@ -62,43 +57,16 @@ def build_mod_stem(mod_info: dict[str, Any]) -> str:
         )
         if part
     ]
-    return "-".join(parts)
+    return "-".join(parts) + ".zip"
 
 
-def build_mod_filename(
-    mod_info: dict[str, Any],
-    download_url: str | None = None,
-    ext: str | None = None,
-) -> str:
-    """
-    Build the output filename for a mod file.
-
-    Format: {mod_name}-{mod_id}-{version}-{file_id}{ext}
-    Example: Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
-
-    The extension is taken from, in order:
-    1. ext (the real filename reported by the CDN, if known)
-    2. the CDN download URL
-    3. the original Nexus filename
-    4. .zip
-    """
-    if not ext:
-        if download_url:
-            ext = Path(download_url.split("?")[0]).suffix
-        if not ext:
-            ext = Path(mod_info.get("filename") or "").suffix
-        if not ext:
-            ext = ".zip"
-    return build_mod_stem(mod_info) + ext
-
-
-def ext_from_content_disposition(headers: dict[str, str]) -> str:
-    """Extract the file extension from a Content-Disposition header."""
+def filename_from_content_disposition(headers: dict[str, str]) -> str:
+    """Extract the filename from a Content-Disposition header."""
     cd = headers.get("Content-Disposition", "")
     # RFC 5987 encoded form first (filename*=UTF-8''name.zip), then plain
     match = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", cd, re.IGNORECASE)
     if match:
-        return Path(match.group(1).strip()).suffix
+        return Path(match.group(1).strip()).name
     return ""
 
 
@@ -117,15 +85,17 @@ class Downloader:
         progress: Progress | None = None,
         task_id: TaskID | None = None,
         on_progress: Callable[[int, int], None] | None = None,
-    ) -> Path:
+    ) -> tuple[Path, bool]:
         """
-        Download a mod file to target_dir using the standard filename.
+        Download a mod file to target_dir, keeping the filename the CDN
+        serves it under (from the Content-Disposition header).
 
         Args:
             on_progress: Optional callback(bytes_downloaded, total_bytes) for
                          generic progress reporting.
 
-        Returns path to the downloaded file.
+        Returns (path to the file, True if it was downloaded now,
+        False if it already existed).
         """
         mod_id = mod_info["mod_id"]
         file_id = mod_info["file_id"]
@@ -139,21 +109,28 @@ class Downloader:
 
         target_dir.mkdir(parents=True, exist_ok=True)
 
+        temp_path: Path | None = None
         try:
             # Streaming GET fetches headers only, so we can resolve the real
             # filename (Content-Disposition) before deciding where to write.
             response = self.session.get(download_url, stream=True)
             response.raise_for_status()
 
-            ext = ext_from_content_disposition(response.headers)
-            final_path = target_dir / build_mod_filename(mod_info, download_url, ext=ext)
+            name = filename_from_content_disposition(response.headers)
+            if not name:
+                name = Path(mod_info.get("filename") or "").name
+            if not name:
+                name = build_mod_stem(mod_info)
+            if mod_info.get("optional"):
+                name = f"[OPTIONAL] {name}"
+            final_path = target_dir / name
 
             # Already downloaded - skip
             if final_path.exists():
                 response.close()
-                return final_path
+                return final_path, False
 
-            temp_path = target_dir / f".downloading_{final_path.name}"
+            temp_path = target_dir / f".downloading_{name}"
 
             total_size = int(response.headers.get("content-length", 0))
 
@@ -172,11 +149,11 @@ class Downloader:
                             on_progress(bytes_downloaded, total_size)
 
             temp_path.rename(final_path)
-            return final_path
+            return final_path, True
 
         except Exception as e:
             # Clean up temp file on error
-            if temp_path.exists():
+            if temp_path is not None and temp_path.exists():
                 temp_path.unlink()
             raise DownloadError(f"Failed to download {original_filename}: {e}")
 
@@ -185,9 +162,9 @@ class Downloader:
         game_domain: str,
         mods: list[dict[str, Any]],
         target_dir: Path,
-        on_complete: Callable[[dict[str, Any], Path], None] | None = None,
+        on_complete: Callable[[dict[str, Any], Path, bool], None] | None = None,
         on_progress: Callable[[int, int], None] | None = None,
-    ) -> list[tuple[dict[str, Any], Path]]:
+    ) -> list[tuple[dict[str, Any], Path, bool]]:
         """
         Download multiple mods with a unified progress display.
 
@@ -199,7 +176,7 @@ class Downloader:
             on_progress: Optional callback(bytes_downloaded, total_bytes) for
                          generic progress (passed through to download_mod).
 
-        Returns list of (mod_info, downloaded_path) tuples.
+        Returns list of (mod_info, path, downloaded_now) tuples.
         """
         results = []
         total_mods = len(mods)
@@ -229,7 +206,7 @@ class Downloader:
                 )
 
                 try:
-                    downloaded_path = self.download_mod(
+                    downloaded_path, downloaded_now = self.download_mod(
                         game_domain=game_domain,
                         mod_info=mod,
                         target_dir=target_dir,
@@ -238,10 +215,10 @@ class Downloader:
                         on_progress=on_progress,
                     )
                     progress.remove_task(task_id)
-                    results.append((mod, downloaded_path))
+                    results.append((mod, downloaded_path, downloaded_now))
 
                     if on_complete:
-                        on_complete(mod, downloaded_path)
+                        on_complete(mod, downloaded_path, downloaded_now)
 
                 except DownloadError as e:
                     progress.remove_task(task_id)

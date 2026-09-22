@@ -12,7 +12,7 @@ from .collection import (
     parse_collection_url,
     parse_mod_url,
 )
-from .downloader import Downloader, build_mod_stem
+from .downloader import Downloader
 
 # progress callback: (event_type, percentage 0-1, message)
 ProgressCallback = Callable[[str, float, str], None]
@@ -149,43 +149,30 @@ class DownloadService:
                 collection_dir=mods_dir,
             )
 
-        # Premium user: download directly, skipping files that already exist.
-        # Match on the extension-less stem so the check works before the
-        # real extension is known from the CDN.
-        skipped = 0
-        to_download = []
-        for mod in mods:
-            stem = build_mod_stem(mod)
-            if (mods_dir / stem).exists() or any(mods_dir.glob(stem + ".*")):
-                skipped += 1
-            else:
-                to_download.append(mod)
-
-        if skipped:
-            progress("download", 0.1, f"Skipping {skipped} already-downloaded mods")
-
-        total_mods = len(to_download)
+        # Premium user: download directly. The downloader skips files that
+        # already exist (matched by the CDN-served filename).
         downloader = Downloader(self.api)
 
-        if not to_download:
-            results = []
-        else:
-            def on_download_progress(bytes_dl: int, total_bytes: int) -> None:
-                if total_bytes > 0:
-                    pct = 0.1 + 0.9 * (bytes_dl / total_bytes)
-                    progress("download", pct, f"Downloading... ({bytes_dl}/{total_bytes} bytes)")
+        def on_download_progress(bytes_dl: int, total_bytes: int) -> None:
+            if total_bytes > 0:
+                pct = 0.1 + 0.9 * (bytes_dl / total_bytes)
+                progress("download", pct, f"Downloading... ({bytes_dl}/{total_bytes} bytes)")
 
-            progress("download", 0.1, f"Downloading {total_mods} mods...")
-            results = downloader.download_mods(
-                game_domain=collection_data["game_domain"],
-                mods=to_download,
-                target_dir=mods_dir,
-                on_progress=on_download_progress,
-            )
+        progress("download", 0.1, f"Downloading {len(mods)} mods...")
+        results = downloader.download_mods(
+            game_domain=collection_data["game_domain"],
+            mods=mods,
+            target_dir=mods_dir,
+            on_progress=on_download_progress,
+        )
 
-        progress("done", 1.0, f"Downloaded {len(results)} mods")
+        downloaded = sum(1 for _, _, dl in results if dl)
+        skipped = len(results) - downloaded
+        if skipped:
+            progress("done", 0.95, f"Skipped {skipped} already-downloaded mods")
+        progress("done", 1.0, f"Downloaded {downloaded} mods")
         return SyncResult(
-            mods_downloaded=len(results),
+            mods_downloaded=downloaded,
             skipped=skipped,
             errors=errors,
             collection_dir=mods_dir,
@@ -303,7 +290,7 @@ class DownloadService:
                 error="Download failed",
             )
 
-        _, path = results[0]
+        _, path, _ = results[0]
         progress("done", 1.0, f"Downloaded {path.name}")
         return ModDownloadResult(
             mod_name=mod_name,

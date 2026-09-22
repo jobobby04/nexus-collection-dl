@@ -94,19 +94,7 @@ If the tool can't auto-select a file (no main file category), it lists all avail
 
 ### File naming
 
-Downloaded files are named:
-
-```
-{mod name}-{mod id}-{version}-{file id}{extension}
-```
-
-For example, the mod `Ring of Mind Shielding Edit` (mod id 19607, file id 1762818108, version 1.0) downloads as:
-
-```
-Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
-```
-
-Version dots are replaced with dashes. The extension comes from the real filename the CDN reports for the file (falling back to the CDN URL, the original Nexus filename, then `.zip`). Optional mods get an `[OPTIONAL]` prefix, e.g. `[OPTIONAL] Some Mod-123-1-0-456.zip`.
+Files keep the filename the Nexus CDN serves them under (e.g. `Head VFX Universal Automatic Patcher (UAP) 1.0.0 22716 1.0.0 2026-06-27T17-32Z sHBNVcw0v.zip`). Optional mods get an `[OPTIONAL]` prefix.
 
 Archives are kept intact - the tool downloads files and leaves them as `.zip`, `.7z`, `.rar`, etc.
 

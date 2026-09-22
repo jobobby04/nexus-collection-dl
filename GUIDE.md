@@ -175,19 +175,7 @@ nexus-dl sync --skip-optional "https://next.nexusmods.com/baldursgate3/collectio
 
 ### File naming
 
-Each downloaded file is named after the mod, its ID, version, and file ID, so you always know where it came from:
-
-```
-{mod name}-{mod id}-{version}-{file id}{extension}
-```
-
-For example:
-
-```
-Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
-```
-
-That's the mod `Ring of Mind Shielding Edit`, mod id 19607, version 1.0 (dots become dashes), file id 1762818108.
+Each downloaded file keeps the filename that Nexus serves it under, so you always know where it came from. Optional mods get an `[OPTIONAL]` prefix.
 
 ## Downloading a single mod
 
