@@ -76,8 +76,6 @@ nexus-dl sync "https://next.nexusmods.com/baldursgate3/collections/abc123" ~/mod
 nexus-dl sync --skip-optional "https://next.nexusmods.com/starfield/collections/xyz789" ~/mods/starfield
 ```
 
-Each collection gets its own named subfolder inside the mods directory (e.g., `~/mods/starfield/My Collection Name/`), so multiple collections for the same game stay organized.
-
 Re-running `sync` is resumable - already-downloaded mods are skipped, so you can safely abort and pick up where you left off.
 
 ### Download a single mod

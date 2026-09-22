@@ -1,9 +1,8 @@
 """Service layer - download logic for nexus-collection-dl."""
 
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 from .api import NexusAPI, NexusAPIError
 from .collection import (
@@ -16,13 +15,6 @@ from .downloader import Downloader
 
 # progress callback: (event_type, percentage 0-1, message)
 ProgressCallback = Callable[[str, float, str], None]
-
-
-def _sanitize_dirname(name: str) -> str:
-    """Turn a collection name into a safe directory name."""
-    name = re.sub(r'[<>:"/\\|?*]', "", name)
-    name = name.strip(". ")
-    return name or "collection"
 
 
 @dataclass
@@ -107,9 +99,6 @@ class DownloadService:
             collection_info.game_domain, collection_info.slug
         )
 
-        # Resolve mods_dir to a per-collection subdirectory
-        dir_name = _sanitize_dirname(collection_data["name"])
-        mods_dir = mods_dir / dir_name
         mods_dir.mkdir(parents=True, exist_ok=True)
 
         mods = collection_data["mods"]

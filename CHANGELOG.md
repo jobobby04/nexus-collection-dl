@@ -12,7 +12,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `download` command - download a single mod by URL
 - Files keep the filename the Nexus CDN serves them under, with an `[OPTIONAL]` prefix for optional mods
 - Resumable downloads - re-running skips files that are already downloaded
-- Per-collection subdirectories - each collection gets its own named subfolder in the mods directory
 - Free and Premium account support - free accounts get a table of browser download links
 - Docker support
 - Automatic version check - prints an upgrade notice if a newer release is available on GitHub

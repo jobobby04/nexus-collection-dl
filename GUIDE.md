@@ -161,8 +161,6 @@ What this does:
 - Downloads each mod file (archives stay as `.zip`, `.7z`, `.rar`, etc.)
 - Saves everything to `~/mods/bg3` (a "mods" folder in your home directory)
 
-Each collection gets its own named subfolder inside the mods directory, so you can sync multiple collections for the same game without them mixing together.
-
 This can take a while depending on how many mods are in the collection. You'll see progress as each mod downloads. If you need to stop partway through, that's fine - re-running `sync` picks up where you left off, skipping mods that were already downloaded.
 
 ### Skipping optional mods
