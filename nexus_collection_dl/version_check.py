@@ -10,7 +10,7 @@ TIMEOUT_SECONDS = 2
 
 
 def _parse_version(v: str) -> tuple[int, ...]:
-    """Parse a version string like '0.2.0' into a comparable tuple."""
+    """Parse a version string like '0.1.0' into a comparable tuple."""
     return tuple(int(x) for x in v.split("."))
 
 

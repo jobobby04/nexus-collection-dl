@@ -1,6 +1,6 @@
 """Download manager with progress tracking."""
 
-import tempfile
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -24,6 +24,59 @@ class DownloadError(Exception):
     pass
 
 
+def _sanitize_component(name: str) -> str:
+    """Make a string safe to use inside a filename."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", name)
+    return name.strip(". ")
+
+
+def _sanitize_version(version: str) -> str:
+    """Normalize a version for use in a filename (1.0 -> 1-0)."""
+    return re.sub(r"[^A-Za-z0-9]+", "-", version).strip("-")
+
+
+def build_mod_filename(mod_info: dict[str, Any], download_url: str | None = None) -> str:
+    """
+    Build the output filename for a mod file.
+
+    Format: {mod_name}-{mod_id}-{version}-{file_id}{ext}
+    Example: Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
+
+    Optional mods get an [OPTIONAL] prefix:
+    Example: [OPTIONAL] Some Mod-123-1-0-456.zip
+
+    The extension comes from the CDN download URL, falling back to the
+    original Nexus filename, then to .zip when no extension can be
+    determined.
+    """
+    mod_name = _sanitize_component(mod_info.get("mod_name") or "")
+    if mod_info.get("optional") and mod_name:
+        mod_name = f"[OPTIONAL] {mod_name}"
+    mod_id = mod_info.get("mod_id")
+    version = mod_info.get("version") or ""
+    file_id = mod_info.get("file_id")
+
+    ext = ""
+    if download_url:
+        ext = Path(download_url.split("?")[0]).suffix
+    if not ext:
+        ext = Path(mod_info.get("filename") or "").suffix
+    if not ext:
+        ext = ".zip"
+
+    parts = [
+        part
+        for part in (
+            mod_name,
+            str(mod_id) if mod_id is not None else "",
+            _sanitize_version(version) if version else "",
+            str(file_id) if file_id is not None else "",
+        )
+        if part
+    ]
+    return "-".join(parts) + ext
+
+
 class Downloader:
     """Handles mod file downloads with progress tracking."""
 
@@ -41,27 +94,32 @@ class Downloader:
         on_progress: Callable[[int, int], None] | None = None,
     ) -> Path:
         """
-        Download a mod file to a temporary location.
+        Download a mod file to target_dir using the standard filename.
 
         Args:
             on_progress: Optional callback(bytes_downloaded, total_bytes) for
-                         generic progress reporting (used by web UI / service layer).
+                         generic progress reporting.
 
         Returns path to the downloaded file.
         """
         mod_id = mod_info["mod_id"]
         file_id = mod_info["file_id"]
-        filename = mod_info["filename"]
+        original_filename = mod_info["filename"]
 
         # Get download URL from API
         try:
             download_url = self.api.get_download_url(game_domain, mod_id, file_id)
         except NexusAPIError as e:
-            raise DownloadError(f"Failed to get download URL for {filename}: {e}")
+            raise DownloadError(f"Failed to get download URL for {original_filename}: {e}")
 
-        # Create temp directory for download
         target_dir.mkdir(parents=True, exist_ok=True)
-        temp_path = target_dir / f".downloading_{filename}"
+        final_path = target_dir / build_mod_filename(mod_info, download_url)
+
+        # Already downloaded - skip
+        if final_path.exists():
+            return final_path
+
+        temp_path = target_dir / f".downloading_{final_path.name}"
 
         try:
             response = self.session.get(download_url, stream=True)
@@ -83,8 +141,6 @@ class Downloader:
                         if on_progress:
                             on_progress(bytes_downloaded, total_size)
 
-            # Rename to final filename
-            final_path = target_dir / filename
             temp_path.rename(final_path)
             return final_path
 
@@ -92,7 +148,7 @@ class Downloader:
             # Clean up temp file on error
             if temp_path.exists():
                 temp_path.unlink()
-            raise DownloadError(f"Failed to download {filename}: {e}")
+            raise DownloadError(f"Failed to download {original_filename}: {e}")
 
     def download_mods(
         self,
@@ -112,8 +168,6 @@ class Downloader:
             on_complete: Callback called after each successful download
             on_progress: Optional callback(bytes_downloaded, total_bytes) for
                          generic progress (passed through to download_mod).
-                         When provided, the Rich progress bar is still shown for
-                         CLI usage, and the callback fires alongside it.
 
         Returns list of (mod_info, downloaded_path) tuples.
         """
@@ -164,15 +218,3 @@ class Downloader:
                     progress.console.print(f"[red]Error:[/red] {e}")
 
         return results
-
-
-def create_download_progress() -> Progress:
-    """Create a progress bar for downloads."""
-    return Progress(
-        TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-        BarColumn(bar_width=30),
-        "[progress.percentage]{task.percentage:>3.0f}%",
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
-    )

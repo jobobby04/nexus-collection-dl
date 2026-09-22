@@ -1,18 +1,18 @@
 # Beginner's Guide
 
-A step-by-step walkthrough for downloading and managing Nexus Mods collections on Linux. No prior command-line experience required - every command is copy-pasteable with an explanation of what it does.
+A step-by-step walkthrough for downloading Nexus Mods collections on Linux. No prior command-line experience required - every command is copy-pasteable with an explanation of what it does.
 
 ## What this tool does
 
-`nexus-dl` lets you download entire mod collections from [Nexus Mods](https://www.nexusmods.com/) on Linux. Collections are curated mod packs that other players put together - think of them as "mod playlists" where someone has already figured out which mods work well together and in what order they should load.
+`nexus-dl` lets you download entire mod collections from [Nexus Mods](https://www.nexusmods.com/) on Linux. Collections are curated mod packs that other players put together - think of them as "mod playlists" where someone has already figured out which mods work well together.
 
-Normally, downloading collections requires Vortex or the Nexus Mods app, which only run on Windows. This tool does the same thing from a Linux terminal (or from a local web page in your browser if you prefer clicking over typing).
+Normally, downloading collections requires Vortex or the Nexus Mods app, which only run on Windows. This tool does the same thing from a Linux terminal.
 
 It works with any game on Nexus Mods - Baldur's Gate 3, Starfield, Cyberpunk 2077, Skyrim, Stardew Valley, and everything else.
 
 ## What you need before starting
 
-1. **A Nexus Mods account** - Both free and Premium accounts work. Premium lets the tool download files automatically. Free accounts work too - you just download the files yourself through the browser and the tool handles everything else (metadata, extraction, load order). More on this below.
+1. **A Nexus Mods account** - Both free and Premium accounts work. Premium lets the tool download files automatically. Free accounts work too - the tool gives you download links and you grab the files through your browser. More on this below.
 
 2. **Python 3.10 or newer** - This comes pre-installed on most Linux distributions. We'll check in a moment.
 
@@ -26,7 +26,7 @@ A terminal is a text window where you type commands. Here's how to open one:
 
 - **Ubuntu / Pop!_OS / Linux Mint**: Press `Ctrl + Alt + T`
 - **Fedora / GNOME**: Press `Super` (the Windows key), type "Terminal", and click it
-- **KDE (Kubuntu, Fedora KDE)**: Press `Ctrl + Alt + T`, or find "Konsole" in your app menu
+- **KDE (Kubuntu, Fedora KDE)**: Press `Ctrl + Alt + T`, or find "Konsole" in your app menu.
 - **Steam Deck (Desktop Mode)**: Tap the Steam icon in the taskbar, go to System > Konsole. Or find "Konsole" in the app launcher.
 
 You should see a window with a blinking cursor. That's where you'll type the commands from this guide.
@@ -88,7 +88,7 @@ Verify it worked:
 nexus-dl --help
 ```
 
-You should see a list of commands like `sync`, `update`, `deploy`, etc. The tool also checks for newer versions automatically - if an update is available, you'll see a notice when you run any command.
+You should see a list of commands like `sync` and `download`. The tool also checks for newer versions automatically - if an update is available, you'll see a notice when you run any command.
 
 ## Getting your API key
 
@@ -158,9 +158,7 @@ Replace the URL with the one you copied, and `bg3` with whatever game abbreviati
 
 What this does:
 - Contacts Nexus Mods to get the list of mods in the collection
-- Downloads each mod file
-- Extracts archives (ZIP, 7z, RAR)
-- Generates a load order so mods load in the right sequence
+- Downloads each mod file (archives stay as `.zip`, `.7z`, `.rar`, etc.)
 - Saves everything to `~/mods/bg3` (a "mods" folder in your home directory)
 
 Each collection gets its own named subfolder inside the mods directory, so you can sync multiple collections for the same game without them mixing together.
@@ -175,13 +173,39 @@ Some collections mark certain mods as optional. To skip those:
 nexus-dl sync --skip-optional "https://next.nexusmods.com/baldursgate3/collections/abc123" ~/mods/bg3
 ```
 
-### File conflicts
+### File naming
 
-After sync (and deploy), the tool checks for file conflicts - cases where two or more mods include the same file. If any are found, you'll see a summary listing which files overlap and which mods are involved. This is informational - the tool still works, but it helps you understand when one mod's files are being overwritten by another.
+Each downloaded file is named after the mod, its ID, version, and file ID, so you always know where it came from:
+
+```
+{mod name}-{mod id}-{version}-{file id}{extension}
+```
+
+For example:
+
+```
+Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
+```
+
+That's the mod `Ring of Mind Shielding Edit`, mod id 19607, version 1.0 (dots become dashes), file id 1762818108.
+
+## Downloading a single mod
+
+You can also download an individual mod by its page URL:
+
+```bash
+nexus-dl download "https://www.nexusmods.com/starfield/mods/123" ~/mods/starfield
+```
+
+This downloads the mod's main file. If a mod has several files and the tool can't tell which one is the main one, it lists the available file IDs - pick one and re-run with `--file-id`:
+
+```bash
+nexus-dl download "https://www.nexusmods.com/starfield/mods/123" ~/mods/starfield --file-id 456
+```
 
 ## If you have a free account
 
-If you don't have Nexus Mods Premium, the tool does everything except the actual file download. You download the mod files yourself through the browser (Nexus shows a countdown timer for free downloads), and the tool handles the rest: figuring out which mods to get, where to find them, extracting archives, generating load order, tracking state, and deployment. Once files are local, everything works identically to Premium.
+If you don't have Nexus Mods Premium, the tool does everything except the actual file download. You download the mod files yourself through the browser (Nexus shows a countdown timer for free downloads).
 
 ### Step 1: Sync the collection
 
@@ -191,7 +215,7 @@ Run the same sync command as Premium users:
 nexus-dl sync "https://next.nexusmods.com/baldursgate3/collections/abc123" ~/mods/bg3
 ```
 
-The tool fetches the collection metadata, caches the manifest for load order generation, and shows you a table with each mod's name, filename, and a clickable URL:
+The tool fetches the collection metadata and shows you a table with each mod's name, filename, and a clickable URL:
 
 ```
 Pending Downloads (manual)
@@ -200,166 +224,14 @@ Script Extender      | ScriptExtender-v2.zip | 12.3 MB | https://www.nexusmods.c
 Better UI            | BetterUI-1.5.pak      | 4.1 MB  | https://www.nexusmods.com/baldursgate3/mods/...
 ...
 
-Free account detected. Download the files above through your browser, save them to ~/mods/bg3, then run:
-  nexus-dl import ~/mods/bg3
+Free account detected. Download the files above through your browser and save them to ~/mods/bg3/My Collection.
 ```
 
 ### Step 2: Download the files
 
-Click each URL. Nexus Mods will show its standard free download page with a countdown timer. When the download starts, save the file to your mods directory (`~/mods/bg3` in this example). Keep the original filename - the tool matches files by name.
+Click each URL. Nexus Mods will show its standard free download page with a countdown timer. When the download starts, save the file to the collection directory shown at the bottom of the table.
 
-**Tip:** You don't have to download everything at once. Download a few, run import, download more later - the tool tracks what's done and what's still pending.
-
-### Step 3: Import
-
-Once you've downloaded some or all of the files:
-
-```bash
-nexus-dl import ~/mods/bg3
-```
-
-This scans the mods directory for files matching the pending downloads, extracts archives, updates the state, and regenerates load order. If some files are still missing, it tells you which ones.
-
-### Step 4: Deploy
-
-Once all mods are imported (or whenever you're ready), deploy as usual:
-
-```bash
-nexus-dl deploy ~/mods/bg3
-```
-
-Everything works identically to Premium from here on - status, updates, undeploy, tracked mods, etc.
-
-### Checking what's still pending
-
-```bash
-nexus-dl status ~/mods/bg3
-```
-
-Mods you haven't downloaded yet show as "Pending download" in yellow.
-
-## Checking status
-
-To see what's installed and whether any mods have updates available:
-
-```bash
-nexus-dl status ~/mods/bg3
-```
-
-This reads the local state file - it doesn't download anything.
-
-## Updating mods
-
-When mod authors release updates, you can pull them in:
-
-```bash
-nexus-dl update ~/mods/bg3
-```
-
-This checks each mod against Nexus, downloads anything that has a newer version, and regenerates the load order.
-
-To preview what would change without actually downloading:
-
-```bash
-nexus-dl update --dry-run ~/mods/bg3
-```
-
-## Deploying to your game
-
-Downloading mods is only half the job - the game needs to find them. The `deploy` command puts the mod files where the game expects them.
-
-```bash
-nexus-dl deploy ~/mods/bg3
-```
-
-If the game was installed through Steam, the tool auto-detects the game directory. If not (or if auto-detection fails), specify it manually:
-
-```bash
-nexus-dl deploy ~/mods/bg3 --game-dir /path/to/your/game/install
-```
-
-You only need to specify `--game-dir` once. The tool remembers it for future deploys.
-
-### What "deploying" actually does
-
-The tool creates **symlinks** (shortcuts) from your mod staging directory into the game's install directory. The original mod files stay in `~/mods/bg3`, but the game sees them as if they're in its own folder.
-
-This means:
-- Mod files aren't duplicated (saves disk space)
-- You can "undeploy" cleanly at any time
-- Updating mods automatically updates what the game sees
-
-### Preview before deploying
-
-```bash
-nexus-dl deploy --dry-run ~/mods/bg3
-```
-
-This shows what files would be placed where, without actually doing anything.
-
-### Removing deployed mods
-
-To undo a deployment and restore your game directory:
-
-```bash
-nexus-dl undeploy ~/mods/bg3
-```
-
-## Using the web UI
-
-If you do not want to memorize terminal commands, the web UI is probably the better option for day-to-day mod management. The CLI is faster for one-off operations and scripting, but the web UI lets you do almost everything from a browser with real-time progress feedback.
-
-To start it:
-
-```bash
-nexus-dl serve ~/mods/bg3
-```
-
-Then open your browser to `http://127.0.0.1:5000`. To use a different port:
-
-```bash
-nexus-dl serve ~/mods/bg3 --port 8080
-```
-
-### What you get
-
-The web UI has two pages:
-
-**Dashboard** - Shows your collection at a glance: collection name, game, installed revision, how many mods, whether updates are available, and deployment status. From here you can sync a collection (paste the URL into a text box), update, deploy, undeploy, regenerate the load order, and manage tracked-mod sync. All with buttons instead of commands.
-
-**Mods** - Lists every installed mod with status badges (up to date, update available, removed from collection, manual, etc.), version numbers, and load phases. You can add a mod by URL or register a local mod from this page.
-
-### Real-time progress
-
-Long-running operations (syncing a big collection, downloading updates) stream progress to the browser in real time. You will see a progress bar and status messages as each mod downloads. This is one area where the web UI is nicer than the CLI, which just prints log lines.
-
-### CLI vs. web UI
-
-Both interfaces share the same code underneath, so the results are identical. The main differences:
-
-- The CLI has `--dry-run` for deploy and update (preview without acting). The web UI does not.
-- The CLI has `--no-load-order` and `--prefix` flags for more granular control.
-- The web UI shows progress bars and visual status badges. The CLI prints text.
-
-If you are just getting started, the web UI is the easier path. You only need the terminal to run `nexus-dl serve` and then everything else happens in the browser.
-
-Press `Ctrl + C` in the terminal to stop the web server when you are done.
-
-## The --no-extract flag
-
-If you use a mod manager like [Stardrop](https://github.com/Jeijael/Stardrop) (for Stardew Valley) or another tool that expects raw archive files instead of extracted folders, use the `--no-extract` flag:
-
-```bash
-nexus-dl sync --no-extract "https://next.nexusmods.com/stardewvalley/collections/abc123" ~/mods/stardew
-```
-
-This downloads the mod archives but leaves them as `.zip`, `.7z`, or `.rar` files instead of extracting them. Your mod manager can then handle extraction and installation its own way.
-
-The flag also works with `update`:
-
-```bash
-nexus-dl update --no-extract ~/mods/stardew
-```
+You don't have to download everything at once - grab as many as you like, and re-run `sync` later to get an updated list.
 
 ## Troubleshooting
 
@@ -387,18 +259,6 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-### "unrar: command not found" during sync
-
-Some mods are packed as RAR archives. Install the `unrar` tool:
-
-```bash
-# Ubuntu/Debian
-sudo apt install unrar
-
-# Fedora
-sudo dnf install unrar
-```
-
 ### Rate limiting / "429 Too Many Requests"
 
 Nexus Mods limits how many requests you can make per hour. If you hit this, wait a few minutes and try again. The tool handles rate limits automatically in most cases, but very large collections might need a retry.
@@ -406,16 +266,6 @@ Nexus Mods limits how many requests you can make per hour. If you hit this, wait
 ### "NEXUS_API_KEY not set"
 
 You need to set your API key. See [Setting your API key](#setting-your-api-key) above. If you set it with the permanent method, make sure you ran `source ~/.bashrc` or opened a new terminal.
-
-### Mods downloaded but game doesn't see them
-
-You need to deploy after syncing:
-
-```bash
-nexus-dl deploy ~/mods/bg3
-```
-
-Downloading puts files in a staging area. Deploying links them into the game directory.
 
 ### Something else went wrong
 

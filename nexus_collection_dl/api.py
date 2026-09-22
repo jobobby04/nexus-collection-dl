@@ -242,24 +242,3 @@ class NexusAPI:
         url = f"{REST_BASE_URL}/users/validate.json"
         response = self.session.get(url)
         return self._handle_response(response)
-
-    def get_tracked_mods(self) -> list[dict[str, Any]]:
-        """Get all mods tracked by the current user."""
-        self._rate_limit_wait()
-        url = f"{REST_BASE_URL}/user/tracked_mods.json"
-        response = self.session.get(url)
-        return self._handle_response(response)
-
-    def track_mod(self, game_domain: str, mod_id: int) -> None:
-        """Add a mod to the user's tracked list."""
-        self._rate_limit_wait()
-        url = f"{REST_BASE_URL}/user/tracked_mods.json"
-        response = self.session.post(url, data={"domain_name": game_domain, "mod_id": mod_id})
-        self._handle_response(response)
-
-    def untrack_mod(self, game_domain: str, mod_id: int) -> None:
-        """Remove a mod from the user's tracked list."""
-        self._rate_limit_wait()
-        url = f"{REST_BASE_URL}/user/tracked_mods.json"
-        response = self.session.delete(url, data={"domain_name": game_domain, "mod_id": mod_id})
-        self._handle_response(response)

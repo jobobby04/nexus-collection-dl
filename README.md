@@ -1,12 +1,12 @@
 # nexus-collection-dl
 
-A tool to download and manage [Nexus Mods](https://www.nexusmods.com/) collections on Linux (and macOS). Works with any game - Baldur's Gate 3, Starfield, Cyberpunk 2077, you name it. Comes with a local web UI and a CLI.
+A tool to download [Nexus Mods](https://www.nexusmods.com/) collections and individual mods from the command line. Works with any game - Baldur's Gate 3, Starfield, Cyberpunk 2077, you name it.
+
+> **Note:** This is a trimmed-down version of the original [nexus-collection-dl](https://github.com/scottmccarrison/nexus-collection-dl) application, pared back to focus on downloading collections themselves. All mod management features (deployment, load order generation, state tracking, web UI) have been removed.
 
 ## Why?
 
-Nexus Mods collections are a great way to grab a curated set of mods in one shot, but the official tools (Vortex, the NexusMods App) are Windows-only. If you're gaming on Linux - whether native or through Proton/Wine - there's no built-in way to download collections from the command line.
-
-`nexus-dl` fills that gap. Point it at a collection URL, and it downloads every mod, extracts archives, generates a load order, and tracks versions so you can update later.
+Nexus Mods collections are a great way to grab a curated set of mods in one shot, but the official tools (Vortex, the NexusMods App) are Windows-only. `nexus-dl` fills that gap: point it at a collection URL, and it downloads every mod file.
 
 **New to the command line?** Check out the [Beginner's Guide](GUIDE.md) for a full walkthrough.
 
@@ -14,11 +14,10 @@ Nexus Mods collections are a great way to grab a curated set of mods in one shot
 
 - Python 3.10+
 - Nexus Mods account (free or Premium - see [Free vs Premium](#free-vs-premium-accounts) below)
-- `unrar` system package (only if the collection includes RAR archives)
 
 ## Installation
 
-### Docker (recommended - includes LOOT support)
+### Docker
 
 ```bash
 git clone https://github.com/scottmccarrison/nexus-collection-dl.git
@@ -34,7 +33,7 @@ docker compose run --rm nexus-dl sync "https://next.nexusmods.com/starfield/coll
 docker run --rm -e NEXUS_API_KEY -v ./mods:/mods nexus-dl sync "https://next.nexusmods.com/starfield/collections/xyz789" /mods
 ```
 
-### Setup script (auto-detects Rust for LOOT)
+### Setup script
 
 ```bash
 git clone https://github.com/scottmccarrison/nexus-collection-dl.git
@@ -42,8 +41,6 @@ cd nexus-collection-dl
 ./setup.sh
 source venv/bin/activate
 ```
-
-If Rust is installed, the setup script automatically builds and installs `libloot` for plugin sorting. If not, the tool still works - it just won't do automatic plugin sorting for Bethesda games.
 
 ### Manual
 
@@ -66,32 +63,7 @@ export NEXUS_API_KEY="your-api-key-here"
 
 The tool checks GitHub for newer versions on every command and prints an upgrade notice if one is available.
 
-## Web UI
-
-Launch the local web interface for day-to-day mod management:
-
-```bash
-nexus-dl serve ~/mods/starfield
-
-# Custom port
-nexus-dl serve ~/mods/starfield --port 8080
-```
-
-Opens a dark-themed dashboard at `http://127.0.0.1:5000` with:
-
-- **Dashboard** - collection info, deployment status, quick action buttons (sync, update, deploy, undeploy)
-- **Mods** - full mod table with status badges, add mod by URL, register local mods
-- **Background tasks** - long-running operations (sync, update, deploy) stream progress in real time
-
-There's also a standalone entry point:
-
-```bash
-nexus-dl-web ~/mods/starfield
-```
-
 ## CLI Usage
-
-All operations are also available from the command line.
 
 ### Download a collection
 
@@ -102,245 +74,66 @@ nexus-dl sync "https://next.nexusmods.com/baldursgate3/collections/abc123" ~/mod
 
 # Skip optional mods
 nexus-dl sync --skip-optional "https://next.nexusmods.com/starfield/collections/xyz789" ~/mods/starfield
-
-# Skip load order generation
-nexus-dl sync --no-load-order "https://next.nexusmods.com/starfield/collections/xyz789" ~/mods/starfield
-
-# Keep archives intact (for external mod managers like Stardrop)
-nexus-dl sync --no-extract "https://next.nexusmods.com/starfield/collections/xyz789" ~/mods/starfield
 ```
 
 Each collection gets its own named subfolder inside the mods directory (e.g., `~/mods/starfield/My Collection Name/`), so multiple collections for the same game stay organized.
 
 Re-running `sync` is resumable - already-downloaded mods are skipped, so you can safely abort and pick up where you left off.
 
-After sync and deploy, the tool reports **file conflicts** - cases where multiple mods wrote to the same file path. This helps you spot overlapping mods and decide on load order priority.
-
-### Check for updates
+### Download a single mod
 
 ```bash
-nexus-dl update ~/mods/starfield
-
-# Preview what would change
-nexus-dl update --dry-run ~/mods/starfield
-
-# Keep archives intact during update
-nexus-dl update --no-extract ~/mods/starfield
-```
-
-### Regenerate load order
-
-```bash
-nexus-dl load-order ~/mods/starfield
-```
-
-Regenerates `load-order.txt` (and `plugins.txt` for Bethesda games) from the cached collection manifest without re-downloading anything.
-
-### Deploy to game directory
-
-```bash
-# Auto-detect game path from Steam
-nexus-dl deploy ~/mods/starfield
-
-# First time with a non-Steam game: specify paths manually
-nexus-dl deploy ~/mods/starfield \
-  --game-dir /mnt/games/SteamLibrary/steamapps/common/Starfield \
-  --prefix ~/.steam/debian-installation/steamapps/compatdata/1234567/pfx
-
-# Copy files instead of symlinking
-nexus-dl deploy ~/mods/starfield --copy
-
-# Preview what would be deployed
-nexus-dl deploy ~/mods/starfield --dry-run
-```
-
-Creates symlinks (or copies) from your staging directory into the game's install directory. For Bethesda games on Proton, it also writes `plugins.txt` and `StarfieldCustom.ini` (or equivalent) to the correct Wine prefix paths.
-
-`--game-dir` and `--prefix` are saved after the first deploy, so subsequent runs only need `nexus-dl deploy ~/mods/starfield`.
-
-Redeploying is safe - it removes previously deployed files before creating new ones, so no orphaned symlinks accumulate.
-
-**SFSE/script extender note:** If the collection includes SFSE, the tool deploys `sfse_loader.exe` to the game root and prints launch instructions. For non-Steam games, set your Steam shortcut TARGET to `sfse_loader.exe`. Do not rename it - SFSE needs the original game executable alongside it.
-
-### Add individual mods
-
-```bash
-# Add a mod by URL (downloads the main file automatically)
-nexus-dl add "https://www.nexusmods.com/starfield/mods/123" ~/mods/starfield
+# Downloads the main file automatically
+nexus-dl download "https://www.nexusmods.com/starfield/mods/123" ~/mods/starfield
 
 # Pick a specific file from the mod
-nexus-dl add "https://www.nexusmods.com/starfield/mods/123" ~/mods/starfield --file-id 456
-
-# Skip load order regeneration
-nexus-dl add --no-load-order "https://www.nexusmods.com/starfield/mods/123" ~/mods/starfield
-
-# Keep the archive intact
-nexus-dl add --no-extract "https://www.nexusmods.com/starfield/mods/123" ~/mods/starfield
+nexus-dl download "https://www.nexusmods.com/starfield/mods/123" ~/mods/starfield --file-id 456
 ```
-
-Downloads a single mod and registers it as a "manual" mod. Manual mods are protected from removal during `update` - they won't be flagged as "removed from collection" since they were never part of it. Manual mods load after all collection mods (phase 999).
 
 If the tool can't auto-select a file (no main file category), it lists all available files so you can re-run with `--file-id`.
 
-### Register local mods
+### File naming
 
-```bash
-nexus-dl add-local "My Custom Mod" ~/mods/starfield
+Downloaded files are named:
+
+```
+{mod name}-{mod id}-{version}-{file id}{extension}
 ```
 
-Registers an already-present mod that you placed in the mods directory manually. Useful for custom patches, merged plugins, or mods from other sources. Like `add`, these are tracked as manual mods and won't be removed by `update`.
+For example, the mod `Ring of Mind Shielding Edit` (mod id 19607, file id 1762818108, version 1.0) downloads as:
 
-### Tracked-mod sync
-
-```bash
-# Enable - syncs tracked mods on Nexus to match your local loadout
-nexus-dl track-sync enable ~/mods/starfield
-
-# Disable - stops future syncs, leaves existing tracked mods alone
-nexus-dl track-sync disable ~/mods/starfield
-
-# One-shot manual push (works regardless of enable/disable)
-nexus-dl track-sync push ~/mods/starfield
+```
+Ring of Mind Shielding Edit-19607-1-0-1762818108.zip
 ```
 
-When enabled, the "tracked" status on nexusmods.com mirrors your local mod list. After `sync`, `update`, `add`, or `add-local`, tracked mods are automatically updated. This is most useful when viewing an individual mod page before downloading - if it shows "tracking", you know it's already in your local loadout. Note that in the mod browse/list view, the "downloaded" badge takes priority over "tracking" in the Nexus UI, so tracked status is only visible on individual mod pages.
+Version dots are replaced with dashes. The extension comes from the CDN download URL (falling back to the original Nexus filename, then `.zip` if no extension can be determined). Optional mods get an `[OPTIONAL]` prefix, e.g. `[OPTIONAL] Some Mod-123-1-0-456.zip`.
 
-Opt-in only - won't touch your tracked mods unless you explicitly enable it. Disabling preserves whatever's currently tracked on Nexus. Only affects mods for the collection's game domain (your tracked Skyrim mods are safe when syncing a Starfield collection). Local-only mods (from `add-local`) are skipped since they don't have Nexus mod IDs.
-
-### Remove deployed mods
-
-```bash
-nexus-dl undeploy ~/mods/starfield
-```
-
-Removes all symlinks/copies that were deployed and restores the game directory to its pre-mod state.
-
-### Import manually downloaded files
-
-```bash
-nexus-dl import ~/mods/starfield
-
-# Keep archives intact
-nexus-dl import --no-extract ~/mods/starfield
-```
-
-Matches files you downloaded through the browser to pending mods, extracts archives, and regenerates load order. See [Free vs Premium](#free-vs-premium-accounts) below for the full workflow.
-
-### View status
-
-```bash
-nexus-dl status ~/mods/starfield
-```
+Archives are kept intact - the tool downloads files and leaves them as `.zip`, `.7z`, `.rar`, etc.
 
 ## Free vs Premium accounts
 
 Both free and Premium Nexus Mods accounts work with `nexus-dl`. The difference is how mod files get downloaded.
 
-**Premium** accounts can download files directly through the API, so `sync`, `update`, and `add` handle everything automatically.
+**Premium** accounts can download files directly through the API, so `sync` and `download` handle everything automatically.
 
-**Free** accounts can't use the Nexus download API (this is a Nexus Mods restriction, not ours), but every other API endpoint works fine - collection metadata, mod info, file listings, tracked mods. The tool uses these free endpoints to do everything except the actual file download. Once files are local, the experience is identical: extraction, load order, deployment, status tracking, and updates all work the same way.
+**Free** accounts can't use the Nexus download API (this is a Nexus Mods restriction, not ours), but every other API endpoint works fine - collection metadata, mod info, file listings. The tool uses these free endpoints to build a list of download links for you:
 
-### Free account workflow
+```
+Pending Downloads (manual)
+Mod                  | Filename              | Size    | URL
+Script Extender      | ScriptExtender-v2.zip | 12.3 MB | https://www.nexusmods.com/...
+Better UI            | BetterUI-1.5.pak      | 4.1 MB  | https://www.nexusmods.com/...
+...
 
-```bash
-# 1. Sync the collection - fetches metadata, caches manifest, prints download links
-nexus-dl sync "https://next.nexusmods.com/starfield/collections/xyz789" ~/mods/starfield
-
-# 2. You'll see a table like:
-#    Mod               | Filename              | Size    | URL
-#    Starfield SE      | StarfieldSE-1.2.zip   | 45.2 MB | https://www.nexusmods.com/...
-#    Better Textures   | BetterTex-v3.7z       | 120 MB  | https://www.nexusmods.com/...
-#    ...
-
-# 3. Click each URL, download through Nexus (free countdown timer), save files to ~/mods/starfield
-
-# 4. Import the downloaded files
-nexus-dl import ~/mods/starfield
-
-# 5. Deploy as usual
-nexus-dl deploy ~/mods/starfield
+Free account detected. Download the files above through your browser and save them to ~/mods/starfield/My Collection.
 ```
 
-The `import` command matches downloaded files by filename (case-insensitive), extracts archives, updates the state, and regenerates load order. If some files are missing, it reports which mods are still pending.
-
-Re-running `sync` or `update` as a free user won't regress mods you've already imported - only new or changed mods show as pending.
-
-The web UI also supports this workflow: the dashboard shows a "Pending Downloads" card with clickable links, and an "Import Downloads" button.
-
-## Load order
-
-`nexus-dl` generates load order files automatically during `sync` and `update`. The approach differs by game type:
-
-### All games
-
-**`load-order.txt`** - Mods listed in topological order based on:
-- **Phase grouping** - The collection author's phase assignments (phase 0 loads before phase 1, etc.)
-- **Collection mod rules** - Explicit before/after/requires relationships from `collection.json`
-- **Author-declared dependencies** - `modRequirements` from the Nexus API (the mod author's own dependency list)
-
-This handles BG3, Cyberpunk, and every other game. Since non-Bethesda games don't have a standardized plugin format (`.pak`, `.archive`, etc.), mod-level ordering is the best we can do.
-
-### Bethesda games (Starfield, Skyrim, Fallout, etc.)
-
-In addition to `load-order.txt`, Bethesda collections also get:
-
-**`plugins.txt`** - Plugin-level load order for `.esp`/`.esm`/`.esl` files. Two sources:
-1. **Collection metadata** - The collection author's intended plugin order (always available)
-2. **LOOT sorting** - Automatic sorting via [libloot](https://github.com/loot/libloot) using master dependency analysis + community masterlists (when libloot is installed)
-
-When libloot is available, LOOT-sorted order takes priority over collection metadata. Enabled/disabled status from the collection is preserved either way.
-
-Supported Bethesda games: Starfield, Skyrim SE, Skyrim, Fallout 4, Fallout NV, Fallout 3, Oblivion, Morrowind, Enderal, plus VR variants.
-
-### LOOT integration
-
-LOOT is optional. Without it, `plugins.txt` uses the collection author's plugin order. With it, plugins are sorted by master dependencies using community-maintained masterlists.
-
-To enable LOOT:
-- **Docker**: Included automatically (the image builds libloot)
-- **setup.sh**: Installed automatically if Rust is detected
-- **Manual**: Install Rust, then `pip install maturin && maturin develop --release` in the libloot repo
-- **Pre-built wheel**: Check [GitHub Releases](https://github.com/scottmccarrison/nexus-collection-dl/releases) for manylinux wheels
-
-Masterlists are cached in `~/.cache/nexus-dl/masterlists/` and refreshed every 24 hours.
+Click each URL, download through Nexus (free countdown timer), and save the files to the collection directory.
 
 ## How it works
 
-- **serve** - Launches a local web UI for managing mods from your browser.
-- **sync** - Fetches the collection from the Nexus API and caches the manifest. Premium: downloads each mod (skipping any already downloaded), extracts archives into per-collection subdirectories, generates load order, and reports file conflicts. Free: prints browser download links for manual download.
-- **update** - Re-fetches the collection and downloads any mods that have newer versions. Regenerates load order.
-- **add** - Downloads a single mod by URL and registers it as a manual mod (phase 999, protected from update removal).
-- **add-local** - Registers an already-present mod in the state without downloading anything.
-- **import** - Matches manually downloaded files to pending mods, extracts archives, and regenerates load order. Used with free accounts after downloading files through the browser.
-- **deploy** - Classifies files by type and symlinks (or copies) them to the correct game directory locations. Handles SFSE, Data/ assets, plugins, and Proton config files.
-- **undeploy** - Removes all deployed files using the tracked manifest, restoring the game directory.
-- **track-sync** - Manages Nexus tracked-mod sync (enable/disable/push). When enabled, the tracked bell icon on the website matches your local loadout.
-- **load-order** - Regenerates load order from the cached manifest (no API call needed).
-- **status** - Shows what's installed and whether updates are available.
-
-Both the web UI and CLI share the same service layer, so all operations behave identically regardless of interface.
-
-State is tracked in a `.nexus-state.json` file inside your mods directory, including the cached collection manifest for offline load order regeneration.
-
-## Supported archive formats
-
-- ZIP
-- 7z
-- RAR (requires system `unrar`)
-- Direct files (.pak, .esp, etc.) are moved as-is
-
-### Installing unrar
-
-```bash
-# Ubuntu/Debian
-sudo apt install unrar
-
-# Fedora
-sudo dnf install unrar
-
-# macOS
-brew install unrar
-```
+- **sync** - Fetches the collection from the Nexus API and downloads each mod file (skipping any already downloaded). Free accounts get a table of browser download links instead.
+- **download** - Downloads a single mod by URL (main file by default, or a specific file with `--file-id`).
 
 ## License
 
